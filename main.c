@@ -8,8 +8,9 @@
 #define IMPLEMENTATION_SIZE 20
 #define NUM_ARG 3
 #define STB_IMAGE_IMPLEMENTATION
-
 #include "stb_image.h"
+// #define STB_IMAGE_WRITE_IMPLEMENTATION
+// #include "stb_image_write.h"
 
 
 #include "haralick_imp.h"
@@ -118,13 +119,13 @@ int main(int argc, char **argv)
 	 *	Load Image
 	 */
 	int width, height, bpp;
-	unsigned char *gray_img;
+	unsigned char *grey_img;
 	int *GLCM, *partial_GLCM;
 	int range;
 
 	// Load in grayscale image 
-    gray_img = stbi_load(img_path, &width, &height, &bpp, 1);
-	int GLCM_size = num_gray_levels(gray_img, width*height);
+    grey_img = stbi_load(img_path, &width, &height, &bpp, 1);
+	int GLCM_size = num_gray_levels(grey_img, width*height);
 	
 	if ((partial_GLCM = (int*) malloc(sizeof(int) * GLCM_size * GLCM_size)) == NULL) {
     	program_abort(argv[0], "Out of memory!");
@@ -160,10 +161,10 @@ int main(int argc, char **argv)
 		}
 		for (y = 0; y < fmin(range, height); y++){
 			for (x = 0; x < width; x++){
-				my_value = gray_img[y*width + x];
+				my_value = grey_img[y*width + x];
 				//printf("%u <- %u \n", my_value, gray_img[y*width + x]);
-				first_neighbor_value = get_first_neighbor(gray_img, x, y, angle, 1, width, height);
-				second_neighbor_value = get_second_neighbor(gray_img, x, y, angle, 1, width, height);
+				first_neighbor_value = get_first_neighbor(grey_img, x, y, angle, 1, width, height);
+				second_neighbor_value = get_second_neighbor(grey_img, x, y, angle, 1, width, height);
 				
 				if ((angle == 0 && x > 0) || (angle == 90 && y > 0) || (angle == 45 && (y > 0 && x < width - 1)) || (angle == 135 && (y > 0 && x > 0))) {
 					//printf("%u, %d, %u => %d \n", my_value, GLCM_size, first_neighbor_value, ((int) my_value)*GLCM_size + (int) first_neighbor_value);
@@ -179,8 +180,8 @@ int main(int argc, char **argv)
 		for(int id = 1; id < num_procs; id++) {
             MPI_Recv(partial_GLCM, GLCM_size*GLCM_size, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
 			
-        for(int j = 0; j < GLCM_size * GLCM_size; j++ ){
-				GLCM[j] = GLCM[j] + partial_GLCM[j];
+			for(int j = 0; j < GLCM_size * GLCM_size; j++ ){
+					GLCM[j] = GLCM[j] + partial_GLCM[j];
 			}
          }
 		 
@@ -191,9 +192,9 @@ int main(int argc, char **argv)
 	else {
 		for (y = fmax(0, rank * range); y < fmin((rank + 1) * range, height); y++){
 			for (x = 0; x < width; x++){
-				my_value = gray_img[y*width + x];
-				first_neighbor_value = get_first_neighbor(gray_img, x, y, angle, 1, width, height);
-				second_neighbor_value = get_second_neighbor(gray_img, x, y, angle, 1, width, height);
+				my_value = grey_img[y*width + x];
+				first_neighbor_value = get_first_neighbor(grey_img, x, y, angle, 1, width, height);
+				second_neighbor_value = get_second_neighbor(grey_img, x, y, angle, 1, width, height);
 				
 				if ((angle == 0 && x > 0) || (angle == 90 && y > 0) || (angle == 45 && (y > 0 && x < width - distance)) || (angle == 135 && (y > 0 && x > 0))) {
 					
@@ -225,6 +226,7 @@ int main(int argc, char **argv)
   // Clean-up
 	free(partial_GLCM);
 	//free(GLCM);
+	stbi_image_free(grey_img); 
 
 
     MPI_Finalize();
