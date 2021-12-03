@@ -1,61 +1,16 @@
-#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <mpi.h>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+#include "haralick_imp.h"
+#include "misc.h"
+
 #define DEFAULT_DISTANCE 1
 #define IMPLEMENTATION_SIZE 20
 #define NUM_ARG 3
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-// #define STB_IMAGE_WRITE_IMPLEMENTATION
-// #include "stb_image_write.h"
-
-
-#include "haralick_imp.h"
-
-static void program_abort(char *exec_name, char *message);
-static void print_usage();
-
-static void program_abort(char *exec_name, char *message) {
-  int my_rank;
-  MPI_Comm_rank(MPI_COMM_WORLD,&my_rank);
-  if (my_rank == 0) {
-    if (message) {
-      fprintf(stderr,"%s",message);
-    }
-    if (exec_name) {
-      print_usage(exec_name);
-    }
-  }
-  MPI_Finalize();
-  exit(1);
-}
-
-// Print the usage information
-static void print_usage(char *exec_name) {
-  int my_rank;
-  MPI_Comm_rank(MPI_COMM_WORLD,&my_rank);
-
-  if (my_rank == 0) {
-    fprintf(stderr,"Usage: smpirun --cfg=smpi/bcast:mpich -np <num processes>\n");
-    fprintf(stderr,"              -platform <XML platform file> -hostfile <host file>\n");
-    fprintf(stderr,"              %s <image path> <angle> [-d <distance>] [-i implementation] \n",exec_name);
-    fprintf(stderr,"MPIRUN arguments:\n");
-    fprintf(stderr,"\t<num processes>: number of MPI processes\n");
-    fprintf(stderr,"\t<XML platform file>: a Simgrid platform description file\n");
-    fprintf(stderr,"\t<host file>: MPI host file with host names from the platform file\n");
-    fprintf(stderr,"PROGRAM arguments:\n");
-    fprintf(stderr,"\t<image path>: path to image to be processed\n");
-    fprintf(stderr,"\t<angle>: haralick angle, can be one of the following (0, 90, 45, 135) \n");
-    fprintf(stderr,"\t[-d <distance>]: haralick distance (optional, default to 1)\n");
-    fprintf(stderr,"\t[-i <implementation>]: haralick implementation (optional)\n");
-    fprintf(stderr,"\n");
-  }
-  return;
-}
-
 
 /*
  * main() function
@@ -64,6 +19,7 @@ int main(int argc, char **argv)
 {	
 	int i;
 	char implementation[IMPLEMENTATION_SIZE];
+	implementation[0] = '\0';
 
 	FILE *file;
 	int angle, num_procs;
@@ -73,7 +29,6 @@ int main(int argc, char **argv)
 	/*
 	 * Init MPI ENV
 	*/
-	MPI_Status status;
 	int rank;
 
 	MPI_Init(&argc, &argv);
@@ -83,24 +38,37 @@ int main(int argc, char **argv)
 	/*
 	 *	Parse input arguments
 	 */
-	 if(argc < NUM_ARG) {
+	if(argc < NUM_ARG) {
 		program_abort(argv[0],"Missing arguments\n");
 	}
 	angle = atoi(argv[2]);
 	img_path = argv[1];
-
 	for (i=1; i < argc; i++) {
 		if (!strcmp(argv[i],"-d")) {
 			if ((i+1 >= argc) || (sscanf(argv[i+1],"%d",&distance) != 1)) {
 				program_abort(argv[0],"Invalid <distance> argument\n");
 			}
-		}else if (!strcmp(argv[i],"-i")) {
+		} else if (!strcmp(argv[i],"-i")) {
 			if ((i+1 >= argc) || (sscanf(argv[i+1],"%s",implementation) != 1)) {
 				program_abort(argv[0],"Invalid <implementation> argument\n");
 			}
+			// Check that the implementation name is valid
+			if (strcmp(implementation, "sequential") &&
+				strcmp(implementation, "sync_vertical_split")) {
+				char message[256];
+				sprintf(message, "Unknown  implementation name '%s'\n",implementation);
+				program_abort(NULL,message);
+			}
 		}
 	}
-
+	if (rank == 0) {
+		printf("=== parsed params === \n");
+		printf(" implementation: %s \n", implementation);
+		printf(" distance: %d \n", distance);
+		printf(" angle: %d \n", angle);
+		printf(" image path: %s \n", img_path);
+		printf("===================== \n");
+	}
 	/*
 	 *	Check arguments
 	 */
@@ -120,17 +88,11 @@ int main(int argc, char **argv)
 	 */
 	int width, height, bpp;
 	unsigned char *grey_img;
-	int *GLCM, *partial_GLCM;
-	int range;
+	int *GLCM;
 
 	// Load in grayscale image 
     grey_img = stbi_load(img_path, &width, &height, &bpp, 1);
 	int GLCM_size = num_gray_levels(grey_img, width*height);
-	
-	if ((partial_GLCM = (int*) malloc(sizeof(int) * GLCM_size * GLCM_size)) == NULL) {
-    	program_abort(argv[0], "Out of memory!");
-  	}
-	range = height / num_procs;
 	
 	if (height % num_procs != 0) {
 		program_abort(NULL, "Image size is not evenly divisible by the number of processes \n");
@@ -139,97 +101,55 @@ int main(int argc, char **argv)
 	/*
 	 *	Process Image
 	 */
-	//printf("I should compute pixel rows %d to %d, for a total of %d rows \nI need access to rows %d to %d to compute my rows \n\n", rank * range, (rank + 1) * range - 1, range, (int) fmax(0, rank * range - distance), (int) fmin((rank + distance) * range, height - 1));
-	
-	for(int d = 0; d < GLCM_size * GLCM_size; d++ ){
-		partial_GLCM[d] = 0;
-	}
-	int y, x;
-	unsigned char first_neighbor_value, second_neighbor_value;
-	unsigned char my_value;
-	
-	double start_time;
-  	MPI_Barrier(MPI_COMM_WORLD);
-	
+	//Init Result GLCM
 	if (rank == 0) {
-		start_time = MPI_Wtime();
-		GLCM = (int*) malloc(sizeof(int) * GLCM_size * GLCM_size);
-		if (!GLCM) { perror("malloc arr"); exit(EXIT_FAILURE); };
-		
-		for(int j = 0; j < GLCM_size * GLCM_size; j++ ){
-			GLCM[j] = 0;
+		if ((GLCM = (int*) malloc(sizeof(int) * GLCM_size * GLCM_size)) == NULL) {
+			program_abort(NULL, "Out of memory! - 1");
 		}
-		for (y = 0; y < fmin(range, height); y++){
-			for (x = 0; x < width; x++){
-				my_value = grey_img[y*width + x];
-				//printf("%u <- %u \n", my_value, gray_img[y*width + x]);
-				first_neighbor_value = get_first_neighbor(grey_img, x, y, angle, 1, width, height);
-				second_neighbor_value = get_second_neighbor(grey_img, x, y, angle, 1, width, height);
-				
-				if ((angle == 0 && x > 0) || (angle == 90 && y > 0) || (angle == 45 && (y > 0 && x < width - 1)) || (angle == 135 && (y > 0 && x > 0))) {
-					//printf("%u, %d, %u => %d \n", my_value, GLCM_size, first_neighbor_value, ((int) my_value)*GLCM_size + (int) first_neighbor_value);
-				//printf("%d \n", my_value*GLCM_size + (int) first_neighbor_value);
-					GLCM[((int) my_value)*GLCM_size + (int) first_neighbor_value]++;
-				}
-				if ((angle == 0 && x < width - distance) || (angle == 90 && y < height - distance) || (angle == 45 && (y < height - distance && x > 0)) || (angle == 135 && (y < height - distance && x < width - distance))) {
-					GLCM[((int) my_value)*GLCM_size + (int) second_neighbor_value]++;
-				}
-			   
-			}
-		}
-		for(int id = 1; id < num_procs; id++) {
-            MPI_Recv(partial_GLCM, GLCM_size*GLCM_size, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
-			
-			for(int j = 0; j < GLCM_size * GLCM_size; j++ ){
-					GLCM[j] = GLCM[j] + partial_GLCM[j];
-			}
-         }
-		 
-//	for(int j = 0; j < GLCM_size * GLCM_size; j++ ){
-	//	printf("%d ", GLCM[j]);
-	//}
+		init_arr_zero(GLCM, GLCM_size * GLCM_size);
 	}
-	else {
-		for (y = fmax(0, rank * range); y < fmin((rank + 1) * range, height); y++){
-			for (x = 0; x < width; x++){
-				my_value = grey_img[y*width + x];
-				first_neighbor_value = get_first_neighbor(grey_img, x, y, angle, 1, width, height);
-				second_neighbor_value = get_second_neighbor(grey_img, x, y, angle, 1, width, height);
-				
-				if ((angle == 0 && x > 0) || (angle == 90 && y > 0) || (angle == 45 && (y > 0 && x < width - distance)) || (angle == 135 && (y > 0 && x > 0))) {
-					
-					//printf("%u, %d, %u => %d/%d \n", my_value, GLCM_size, first_neighbor_value, ((int) my_value)*GLCM_size + (int) first_neighbor_value, GLCM_size*GLCM_size);
-					
-					partial_GLCM[((int) my_value)*GLCM_size + (int) first_neighbor_value]++;
-					
-					//partial_GLCM[0]++;
-				}
-				if ((angle == 0 && x < width - distance) || (angle == 90 && y < height - distance) || (angle == 45 && (y < height - distance && x > 0)) || (angle == 135 && (y < height - distance && x < width - distance))) {
-					partial_GLCM[((int) my_value)*GLCM_size + (int) second_neighbor_value]++;
-				}
-			   
-			}
-		}
-		MPI_Send(partial_GLCM, GLCM_size*GLCM_size, MPI_INT, 0, 0, MPI_COMM_WORLD);
+	
+	//Execute
+	double start_time;
+	start_time = MPI_Wtime();
+
+	if (strcmp(implementation, "sequential") == 0){
+		if (rank == 0) printf("running implementation: sequential \n");
+		sequential(
+			(mpi_data) {.num_procs=num_procs, .rank=rank},
+			(img_data) {.arr=grey_img, .height=height, .width=width},
+			(gclm_data) {.angle=angle, .arr=GLCM, .dist=distance, .size=GLCM_size}
+		);
+	} else {
+		if (rank == 0) printf("running implementation: sync_vertical_split \n");
+		sync_vertical_split(
+			(mpi_data) {.num_procs=num_procs, .rank=rank},
+			(img_data) {.arr=grey_img, .height=height, .width=width},
+			(gclm_data) {.angle=angle, .arr=GLCM, .dist=distance, .size=GLCM_size}
+		);
 	}
 	
 	MPI_Barrier(MPI_COMM_WORLD);
-	
-	if (0 == rank) {
-    fprintf(stdout,"image size: %d | number of processes: %d |  time: %.3lf seconds\n",
-		    width, 
-		    num_procs,
-		    MPI_Wtime() - start_time);
-  }
-	  
 
-  // Clean-up
-	free(partial_GLCM);
-	//free(GLCM);
+	//Aggregate Time
+	if (rank == 0) {
+		fprintf(stdout,"image size: %d | number of processes: %d |  time: %.3lf seconds\n",
+			width, 
+			num_procs,
+			MPI_Wtime() - start_time);
+	}
+	
+	//Check Results
+	check_gclm(
+		(mpi_data){.rank=rank},
+		(img_data){.arr=grey_img, .height=height, .width=width},
+		(gclm_data){.angle=angle, .arr=GLCM, .dist=distance, .size=GLCM_size}
+	);
+	
+  	// Clean-up
+	if (rank == 0)
+		free(GLCM);
 	stbi_image_free(grey_img); 
 
-
     MPI_Finalize();
-	
-	
 }
