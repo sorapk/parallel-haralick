@@ -6,6 +6,9 @@
 \usepackage{microtype}
 \usepackage{graphicx}
 \usepackage{amssymb}
+\usepackage{inconsolata}
+% \usepackage[charter]{mathdesign}
+% \def\ttdefault{blg}
 \usepackage{color}
 \usepackage[font=footnotesize,labelfont=bf]{caption}
 \usepackage[square,numbers]{natbib}
@@ -13,6 +16,8 @@
 \usepackage{subfigure}
 \usepackage{booktabs} % for professional tables
 \bibliographystyle{unsrtnat}
+
+\newcommand*{\codefont}{\fontfamily{GoMono}\selectfont}
 
 % hyperref makes hyperlinks in the resulting PDF.
 % If your build breaks (sometimes temporarily if a hyperlink spans a page)
@@ -43,7 +48,7 @@
 \end{abstract}
 
 \section{Introduction}
-    Image texture is an important feature in computer vision tasks. Textural features have been developed to allow for objective comparison of textures between images and image regions. Haralick introduced the Gray-Level Co-Occurrence Matrix (GLCM) in 1973 as a necessary step for the computation of the Haralick texture features \cite{haralick}. Constructing the GLCM for a given grayscale image involves analyzing the spatial relationships between each pixel and its neighbors for a given angle and distance \cite{haralick}. The computation of the GLCM is computationally expensive and its execution time relies heavily on the size of the image. For a grayscale image of size $n \times n$, construction of the GLCM demands $n^2$ memory accesses and $n$ writes. In this paper, we compare several methods for parallel construction of the GLCM using MPI. 
+    Image texture is an important feature in computer vision tasks. Textural features have been developed to allow for objective comparison of textures between images and image regions. Haralick introduced the Gray-Level Co-Occurrence Matrix (GLCM) in 1973 as a necessary step for the computation of the Haralick texture features \cite{haralick}. Constructing the GLCM for a given grayscale image involves analyzing the spatial relationships between each pixel and its neighbors for a given angle and distance \cite{haralick}. The computation of the GLCM is computationally expensive, though embarrassingly parallel, and its execution time relies heavily on the size of the image. For a grayscale image of size $n \times n$, construction of the GLCM demands $n^2$ memory accesses and $n$ writes. In this paper, we compare several methods for parallel construction of the GLCM using MPI.
 \section{Background}
 \subsection{Gray-Level Co-occurrence Matrix}
     Haralick devised the GLCM (referred to as Gray-Tone Spatial-Dependence Matrices in his work) as a preliminary step for the computation of the Haralick textural features \cite{haralick}. The GLCM is a flexible measure of spatial dependence between pixel gray levels which is defined by an angle, a distance, and the unique gray tones in an image. We define the GLCM for some grayscale image $A$, generally following Haralick's notation, below. \\ \\
@@ -62,9 +67,14 @@
       \label{fig:matrix}
     \end{figure}
 \subsection{MPI}
-   
+   MPI is a standard message passing interface
+   designed for distributed memory systems. MPI was first proposed in 1993 as the culmination of efforts from more than 40 organizations from  the United States and across Europe \cite{mpi1}. MPI is now the standard for distributed memory systems. MPI provides routines for both blocking and non-blocking communication between processes, and routines for collective communication between all processes \cite{mpi}. \\ \\ 
+   We do not provide a comprehensive review of MPI here, but simply outline the communication routines which we make use of in our implementation. \texttt{MPI\_Send} represents a blocking send procedure. A single envelope of data is sent from process $x$ to process $y$. The program cannot continue until process $y$ acknowledges receipt of the envelope. \texttt{MPI\_Recv} represents a blocking receive procedure. After process $x$ sends its envelope, process $y$ must wait until it receives the envelope from process $x$ to proceed. \texttt{MPI\_ISend} and \texttt{MPI\_IRecv} represent a non-blocking send and receive, respectively. A single envelope of data is sent from process $x$ to process $y$, but neither receipt nor send must be acknowledged before either process can proceed. \texttt{MPI\_Wait} is used to perform blocking communication, the process identified must wait until the identified request is complete. \\ \\ 
+   MPI allows for computation over a large set of data to be distributed over many processes. We use MPI to partition out the image $A$. Each process independently constructs a section of the GLCM. A single root process then gathers the partial GLCMs computed by the processes and combines them into a single GLCM for the image $A$. 
 \section{Related Work}
-
+    The literature focused on implementing parallel versions of  the Haralick texture features tends to also include information on parallelization of GLCM construction. Parallel implementations and hardware-specific implementations are of specific interest in the medical field, where Haralick features are used for analysis of medical imaging \cite{medref1} \cite{medref2} \cite{medref3} \cite{medref4}. Efficient parallel implementations of GLCM construction is needed for both 2D and 3D medical imaging modalities. \\ \\ 
+    HaraliCU is an algorithm which exploits the parallel computation capabilities of Graphics Processing Units (GPUs) to efficiently compute the Haralick features \cite{haralicpu}. HaraliCU computes the GLCM using a sliding window approach. Each pixel of a sliding window of the image $A$ is assigned to a single thread, and its neighbors within that window are computed before moving to the next window. The GLCM is stored as a flat list, with entries $(g_e, g_f), freq$ where $(g_e, g_f) \in G \times G$ and $freq$ represents the frequency of the given spatial relationship between $g_e$ and $g_f$ occurring. The HaraliCPU implementation achieved a 15.90$\times$ speedup on multi-threaded GPUs over a sequential version on a single CPU  \cite{haralicpu}. HaraliCPU depends on the fact that GPU is available and also does not make use of shared memory, causing unnecessary latencies. \\ \\ 
+    Another exploration into using GPUs to achieve highly parallel computation of the Haralick features is found in \cite{gipp}. 
 \section{Parallel Algorithm}
 
 \section{Experimental Results}
