@@ -6,6 +6,8 @@
 \usepackage{microtype}
 \usepackage{graphicx}
 \usepackage{amssymb}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
 \usepackage{inconsolata}
 % \usepackage[charter]{mathdesign}
 % \def\ttdefault{blg}
@@ -74,8 +76,43 @@
 \section{Related Work}
     The literature focused on implementing parallel versions of  the Haralick texture features tends to also include information on parallelization of GLCM construction. Parallel implementations and hardware-specific implementations are of specific interest in the medical field, where Haralick features are used for analysis of medical imaging \cite{medref1} \cite{medref2} \cite{medref3} \cite{medref4}. Efficient parallel implementations of GLCM construction is needed for both 2D and 3D medical imaging modalities. \\ \\ 
     HaraliCU is an algorithm which exploits the parallel computation capabilities of Graphics Processing Units (GPUs) to efficiently compute the Haralick features \cite{haralicpu}. HaraliCU computes the GLCM using a sliding window approach. Each pixel of a sliding window of the image $A$ is assigned to a single thread, and its neighbors within that window are computed before moving to the next window. The GLCM is stored as a flat list, with entries $(g_e, g_f), freq$ where $(g_e, g_f) \in G \times G$ and $freq$ represents the frequency of the given spatial relationship between $g_e$ and $g_f$ occurring. The HaraliCPU implementation achieved a 15.90$\times$ speedup on multi-threaded GPUs over a sequential version on a single CPU  \cite{haralicpu}. HaraliCPU depends on the fact that GPU is available and also does not make use of shared memory, causing unnecessary latencies. \\ \\ 
-    Another exploration into using GPUs to achieve highly parallel computation of the Haralick features is found in \cite{gipp}. 
+    Another exploration into using GPUs to achieve highly parallel computation of the Haralick features is found in \cite{gipp}. Gipp et al. examined parallelization of GLCM construction and feature computation on microscopy images. Due to the relative simplicity of gray tone spatial relationships in microscopy imagery (typically only 2 or 3 unique neighboring gray tones)  Gipp et al. chose to condense the GLCM by removing all zero-filled rows and columns \cite{gipp}. It's unclear how effective the "packing" strategy would be on an image with more variation in its spatial relationships. Gipp et al. also implement parallelization by splitting their multi-cell microscopy images into single- cell images, and passing each image to a separate GPU thread \cite{gipp}. Gipp et al. do not use distributed memory in their approach, and do not implement parallelization on the individual image level. \\ \\
+   Parallel GLCM construction using distributed memory is seen in \cite{shahbahrami}. Shahbahrami, Pham, and Bertels implement GLCM construction and computation of the Haralick texture features in parallel on a cell architecture, a multi-core architecture containing nine processors of two types \cite{shahbahrami}.  Shahbahrami, Pham, and Bertels achieved a 10$\times$ speedup over non-parallel optimized implementations. Shahbahrami, Pham, and Bertels approach GLCM construction similarly to our method, splitting the image by rows to compute independently, before summing at two levels (i.e. for four processes, a sum is computed between processes 1 and 2 in parallel with processes 3 and 4, then a final sum is computed) to construct the final GLCM \cite{shahbahrami}. Shahbahrami, Pham, and Bertels tested their implementation with images with only 128 distinct gray levels, limiting the real-world implications of their results. 
 \section{Parallel Algorithm}
+\begin{algorithm}
+    \caption{Algorithm for the non-root MPI processes, $P_x$ where $x \in X$ and $x > 0$. $X$ is the total number of processes. Recall that $N$ is the number of rows in a certain image $A$. }\label{alg:1}
+    \begin{algorithmic}
+       % \Require $n \geq 0$
+       % \Ensure $y = x^n$
+        \State $start \gets x \cdot \frac{N}{X}$
+        \State $stop \gets (x + 1) \cdot \frac{N}{X}$
+        \State $partial \gets [0, 0, 0, ..., 0]$
+        \While{$p$ in $start...stop$}
+        \If{$p$ has a neighbor}
+            \State $partial[p] \gets partial[p] + 1$
+           % \State $N \gets \frac{N}{2}$  \Comment{This is a comment}
+        \EndIf
+        \EndWhile
+        \State \texttt{MPI\_Send}$(partial, 0)$
+    \end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}
+    \caption{Algorithm for the root MPI process, $P_0$. $X$ is the total number of processes. Recall that $N$ is the number of rows in a certain image $A$. }\label{alg:2}
+    \begin{algorithmic}
+        \State $stop \gets \frac{N}{X}$
+        \State $GLCM \gets [0, 0, 0, ..., 0]$
+        \While{$p$ in $0...stop$}
+        \If{$p$ has a neighbor}
+            \State $GLCM[p] \gets GLCM[p] + 1$
+        \EndIf
+        \EndWhile
+        \For{$x := 1$ \textbf{to} $X$}
+            \State \texttt{MPI\_Receive}$(partial, P_x)$
+            \State $GLCM \gets GLCM + partial$
+        \EndFor
+    \end{algorithmic}
+\end{algorithm}
 
 \section{Experimental Results}
 \subsection{Simulated Experiments}
