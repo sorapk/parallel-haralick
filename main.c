@@ -9,9 +9,9 @@
 #include "misc.h"
 
 #define DEFAULT_DISTANCE 1
+#define DEFAULT_IMPLMENTATION  "sync_vertical_split"
 #define IMPLEMENTATION_SIZE 20
 #define NUM_ARG 3
-
 /*
  * main() function
  */
@@ -19,7 +19,7 @@ int main(int argc, char **argv)
 {	
 	int i;
 	char implementation[IMPLEMENTATION_SIZE];
-	implementation[0] = '\0';
+	sprintf(implementation, DEFAULT_IMPLMENTATION); 
 
 	FILE *file;
 	int angle, num_procs;
@@ -62,12 +62,14 @@ int main(int argc, char **argv)
 		}
 	}
 	if (rank == 0) {
-		printf("=== parsed params === \n");
-		printf(" implementation: %s \n", implementation);
-		printf(" distance: %d \n", distance);
-		printf(" angle: %d \n", angle);
-		printf(" image path: %s \n", img_path);
-		printf("===================== \n");
+		#ifdef DEBUG
+			printf("=== parsed params === \n");
+			printf(" implementation: %s \n", implementation);
+			printf(" distance: %d \n", distance);
+			printf(" angle: %d \n", angle);
+			printf(" image path: %s \n", img_path);
+			printf("===================== \n");
+		#endif
 	}
 	/*
 	 *	Check arguments
@@ -94,10 +96,6 @@ int main(int argc, char **argv)
     grey_img = stbi_load(img_path, &width, &height, &bpp, 1);
 	int GLCM_size = num_gray_levels(grey_img, width*height);
 	
-	if (height % num_procs != 0) {
-		program_abort(NULL, "Image size is not evenly divisible by the number of processes \n");
-	}
-	
 	/*
 	 *	Process Image
 	 */
@@ -114,15 +112,16 @@ int main(int argc, char **argv)
 	start_time = MPI_Wtime();
 
 	if (strcmp(implementation, "sequential") == 0){
-		if (rank == 0) printf("running implementation: sequential \n");
-		sequential(
+		sequential_v2(
 			(mpi_data) {.num_procs=num_procs, .rank=rank},
 			(img_data) {.arr=grey_img, .height=height, .width=width},
 			(gclm_data) {.angle=angle, .arr=GLCM, .dist=distance, .size=GLCM_size}
 		);
 	} else {
-		if (rank == 0) printf("running implementation: sync_vertical_split \n");
-		sync_vertical_split(
+		if (height % num_procs != 0) {
+			program_abort(NULL, "Image size is not evenly divisible by the number of processes \n");
+		}
+		sync_vertical_split_v2(
 			(mpi_data) {.num_procs=num_procs, .rank=rank},
 			(img_data) {.arr=grey_img, .height=height, .width=width},
 			(gclm_data) {.angle=angle, .arr=GLCM, .dist=distance, .size=GLCM_size}
@@ -131,20 +130,25 @@ int main(int argc, char **argv)
 	
 	MPI_Barrier(MPI_COMM_WORLD);
 
-	//Aggregate Time
+	//Print Summary
 	if (rank == 0) {
-		fprintf(stdout,"image size: %d | number of processes: %d |  time: %.3lf seconds\n",
+		int good = check_gclm(
+			(mpi_data){.rank=rank},
+			(img_data){.arr=grey_img, .height=height, .width=width},
+			(gclm_data){.angle=angle, .arr=GLCM, .dist=distance, .size=GLCM_size}
+		);
+		fprintf(stdout,"%s | width: %d | height: %d | angle: %d | dist: %d | num_proc: %d |  time: %.3lfs | %s\n",
+			implementation,
 			width, 
+			height,
+			angle,
+			distance,
 			num_procs,
-			MPI_Wtime() - start_time);
+			MPI_Wtime() - start_time,
+			good ? "correct" : "incorrect!");
 	}
 	
-	//Check Results
-	check_gclm(
-		(mpi_data){.rank=rank},
-		(img_data){.arr=grey_img, .height=height, .width=width},
-		(gclm_data){.angle=angle, .arr=GLCM, .dist=distance, .size=GLCM_size}
-	);
+	
 	
   	// Clean-up
 	if (rank == 0)
