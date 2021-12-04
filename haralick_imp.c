@@ -14,7 +14,9 @@
 */
 void get_neighbors(int x, int y, img_data img, gclm_data gclm, int* neighbor1, int* neighbor2);
 
-//Deprecated
+/* 
+ * Deprecated Prototypes
+ */
 void sequential(mpi_data mpi, img_data img, gclm_data gclm);
 unsigned char get_first_neighbor(unsigned char image[], int x, int y, int angle, int distance, int width, int height);
 unsigned char get_second_neighbor(unsigned char image[], int x, int y, int angle, int distance, int width, int height);
@@ -146,6 +148,67 @@ void sync_vertical_split_v2(mpi_data mpi, img_data img, gclm_data gclm){
 		// Compute Partial GCLM
 		for (y = fmax(0, mpi.rank * range); y < fmin((mpi.rank + 1) * range, img.height); y++){
 			for (x = 0; x < img.width; x++){
+				int my_value = img.arr[y*img.width + x];
+				get_neighbors(x, y, img, gclm, &neighbor1, &neighbor2);
+				if (neighbor1 >= 0) 
+					partial_GLCM[my_value*gclm.size + neighbor1]++;
+				if (neighbor2 >= 0)
+					partial_GLCM[my_value*gclm.size + neighbor2]++;
+			}
+		}
+		// Send Partial GCLM
+		MPI_Send(partial_GLCM, gclm.size*gclm.size, MPI_INT, 0, 0, MPI_COMM_WORLD);
+	}
+}
+void sync_tiling_split(mpi_data mpi, img_data img, gclm_data gclm) {
+	
+	int N = img.width;
+	int root_p = (int) sqrt((double) mpi.num_procs);
+	int rank_row = mpi.rank / root_p;
+	int rank_col = mpi.rank % root_p;
+	int block = img.width / root_p;
+	int block_size = block * block;
+
+	int i,j;
+	int neighbor1, neighbor2;
+	int  *partial_GLCM;
+	MPI_Status status;
+
+	// Init Partial GCLM
+	if ((partial_GLCM = (int*) malloc(sizeof(int) * gclm.size * gclm.size)) == NULL) {
+    	program_abort(NULL, "Out of memory! - 2");
+  	}
+	init_arr_zero(partial_GLCM, gclm.size * gclm.size);
+	
+	// Rank 0
+	if (mpi.rank == 0) {
+		for (i = 0; i < block; i++) {
+			for (j = 0; j < block; j++) {
+				int y = rank_row * block + i;
+				int x = rank_col * block + j;
+				int my_value = img.arr[y*img.width + x];
+				get_neighbors(x, y, img, gclm, &neighbor1, &neighbor2);
+				if (neighbor1 >= 0) 
+					gclm.arr[my_value*gclm.size + neighbor1]++;
+				if (neighbor2 >= 0)
+					gclm.arr[my_value*gclm.size + neighbor2]++;
+			}
+		}
+		// Aggregate Partial GCLM into GCLM
+		for(int id = 1; id < mpi.num_procs; id++) {
+			MPI_Recv(partial_GLCM, gclm.size*gclm.size, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
+			for(int j = 0; j < gclm.size * gclm.size; j++ ){
+				gclm.arr[j] = gclm.arr[j] + partial_GLCM[j];
+			}
+		}
+	} 
+	// Other Ranks
+	else {
+		// Compute Partial GCLM
+		for (i = 0; i < block; i++) {
+			for (j = 0; j < block; j++) {
+				int y = rank_row * block + i;
+				int x = rank_col * block + j;
 				int my_value = img.arr[y*img.width + x];
 				get_neighbors(x, y, img, gclm, &neighbor1, &neighbor2);
 				if (neighbor1 >= 0) 

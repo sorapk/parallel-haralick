@@ -54,7 +54,8 @@ int main(int argc, char **argv)
 			}
 			// Check that the implementation name is valid
 			if (strcmp(implementation, "sequential") &&
-				strcmp(implementation, "sync_vertical_split")) {
+				strcmp(implementation, "sync_vertical_split") &&
+				strcmp(implementation, "tiling")) {
 				char message[256];
 				sprintf(message, "Unknown  implementation name '%s'\n",implementation);
 				program_abort(NULL,message);
@@ -117,6 +118,19 @@ int main(int argc, char **argv)
 			(img_data) {.arr=grey_img, .height=height, .width=width},
 			(gclm_data) {.angle=angle, .arr=GLCM, .dist=distance, .size=GLCM_size}
 		);
+	} else if (strcmp(implementation, "tiling") == 0) {
+  		int root_p = (int) sqrt((double)num_procs);
+		if (width != height) {
+			program_abort(NULL,"Image must be NxN square\n");
+		}
+		if (width % root_p != 0) {
+			program_abort(NULL,"Root of number of processes must divide image width\n");
+		}
+		sync_tiling_split(
+			(mpi_data) {.num_procs=num_procs, .rank=rank},
+			(img_data) {.arr=grey_img, .height=height, .width=width},
+			(gclm_data) {.angle=angle, .arr=GLCM, .dist=distance, .size=GLCM_size}
+		);
 	} else {
 		if (height % num_procs != 0) {
 			program_abort(NULL, "Image size is not evenly divisible by the number of processes \n");
@@ -126,7 +140,7 @@ int main(int argc, char **argv)
 			(img_data) {.arr=grey_img, .height=height, .width=width},
 			(gclm_data) {.angle=angle, .arr=GLCM, .dist=distance, .size=GLCM_size}
 		);
-	}
+	} 
 	
 	MPI_Barrier(MPI_COMM_WORLD);
 
