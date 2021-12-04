@@ -17,7 +17,7 @@ void get_neighbors(int x, int y, img_data img, gclm_data gclm, int* neighbor1, i
 /* 
  * Deprecated Prototypes
  */
-void sequential(mpi_data mpi, img_data img, gclm_data gclm);
+void sequential(mpi_data mpi, img_data img, gclm_data gclm); //Still used in check_gclm for consistencies
 unsigned char get_first_neighbor(unsigned char image[], int x, int y, int angle, int distance, int width, int height);
 unsigned char get_second_neighbor(unsigned char image[], int x, int y, int angle, int distance, int width, int height);
 
