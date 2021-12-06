@@ -121,7 +121,7 @@
         \EndFor
     \end{algorithmic}
 \end{algorithm}
-    The tiled parallel algorithm computes the GLCM for a particular combination of a grayscale image $A$, an angle $a$, a distance $d$ and a number of processes $X$. We restrict the number of processes to an integer factor of the number of rows in the image ($N$) to simplify partitioning, and require the image size to be $N \times N$. Each process needs to compute a partial GLCM based on the pixels in $\frac{N}{0.5X} \times \frac{N}{0.5X}$ tiles of the image $A$. Figure \ref{fig:tiles} depicts the division of work for the row-based parallel algorithm with $X = 2$ and some particular image $A$ with $N = 4$.
+    The tiled parallel algorithm computes the GLCM for a particular combination of a grayscale image $A$, an angle $a$, a distance $d$ and a number of processes $X$. We restrict the number of processes to an integer factor of the number of rows in the image ($N$) to simplify partitioning, and require the image size to be $N \times N$. Each process needs to compute a partial GLCM based on the pixels in $\frac{N}{0.5X} \times \frac{N}{0.5X}$ tiles of the image $A$. Figure \ref{fig:tiles} depicts the division of work for the tile-based parallel algorithm with $X = 2$ and some particular image $A$ with $N = 4$.
 \begin{figure}[b]
       \includegraphics[width=\linewidth]{tile_partitioning.jpg}
       \caption{Diagram depicting the computation of partial GLCMs for $X = 4$ on image $A$ from Figure \ref{fig:matrix} for the tile-based parallel algorithm with $d = 1, a = 0$. The root process $P_0$ is shown in yellow and the worker processes $P_1$, $P_2$ and $P_3$ are shown in red, blue, and green, respectively. }
