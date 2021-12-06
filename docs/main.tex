@@ -79,21 +79,24 @@
     Another exploration into using GPUs to achieve highly parallel computation of the Haralick features is found in \cite{gipp}. Gipp et al. examined parallelization of GLCM construction and feature computation on microscopy images. Due to the relative simplicity of gray tone spatial relationships in microscopy imagery (typically only 2 or 3 unique neighboring gray tones)  Gipp et al. chose to condense the GLCM by removing all zero-filled rows and columns \cite{gipp}. It's unclear how effective the "packing" strategy would be on an image with more variation in its spatial relationships. Gipp et al. also implement parallelization by splitting their multi-cell microscopy images into single- cell images, and passing each image to a separate GPU thread \cite{gipp}. Gipp et al. do not use distributed memory in their approach, and do not implement parallelization on the individual image level. \\ \\
    Parallel GLCM construction using distributed memory is seen in \cite{shahbahrami}. Shahbahrami, Pham, and Bertels implement GLCM construction and computation of the Haralick texture features in parallel on a cell architecture, a multi-core architecture containing nine processors of two types \cite{shahbahrami}.  Shahbahrami, Pham, and Bertels achieved a 10$\times$ speedup over non-parallel optimized implementations. Shahbahrami, Pham, and Bertels approach GLCM construction similarly to our method, splitting the image by rows to compute independently, before summing at two levels (i.e. for four processes, a sum is computed between processes 1 and 2 in parallel with processes 3 and 4, then a final sum is computed) to construct the final GLCM \cite{shahbahrami}. Shahbahrami, Pham, and Bertels tested their implementation with images with only 128 distinct gray levels, limiting the real-world implications of their results. 
 \section{Parallel Algorithm}
-    We implemented two different parallel implementations of the GLCM construction process. Each algorithm makes use of MPI processes having their own memory to store partial computations and a partial copy of the grayscale image, while referring to a relevant section of the grayscale image $A$. We implemented a row-based parallel algorithm, a tiled parallel algorithm, and a sequential algorithm. \\ \\ 
-    The row-based parallel algorithm computes the GLCM for a particular combination of a grayscale image $A$, an angle $a$, a distance $d$ and a number of processes $X$. We restrict the number of processes to an integer factor of the number of rows in the image ($N$) to simplify partitioning. Each process needs to compute a partial GLCM based on the pixels in $\frac{N}{X}$ rows of the image $A$. \\ \\ 
-    We define the root process as $P_0$. The root process reads in the entire grayscale image $A$ and computes the number of gray levels in the image ($G$). The root then performs an \texttt{MPI\_Bcast} to share the size ($G \times G$) with the workers. Each worker process $P_x$ where $x \in X / \{0\}$ receives rows $x \cdot \frac{N}{X} - d$ to $x \cdot \frac{N}{X} + d$ from the root process $P_0$ and allocates a partial GLCM of size $G \times G$. Then, the root process receives all partial GLCMs from the worker processes and computes the final GLCM for the entire image $A$. The algorithm for the child processes is displayed in Algorithm \ref{alg:1} and the algorithm for the root process is displayed in Algorithm \ref{alg:2}. \\ \\ 
-    The tiled parallel algorithm computes the GLCM for a particular combination of a grayscale image $A$, an angle $a$, a distance $d$ and a number of processes $X$. We restrict the number of processes to an integer factor of the number of rows in the image ($N$) to simplify partitioning, and require the image size to be $N \times N$.
+    We implemented two different parallel implementations of the GLCM construction process. Each algorithm makes use of MPI processes having their own memory to store partial computations and a copy of the grayscale image, while referring to a relevant section of the grayscale image $A$. We implemented a row-based parallel algorithm, a tiled parallel algorithm, and a sequential algorithm. \\ \\ 
+    The row-based parallel algorithm computes the GLCM for a particular combination of a grayscale image $A$, an angle $a$, a distance $d$ and a number of processes $X$. We restrict the number of processes to an integer factor of the number of rows in the image ($N$) to simplify partitioning. Each process needs to compute a partial GLCM based on the pixels in $\frac{N}{X}$ rows of the image $A$. Figure \ref{fig:rows} depicts the division of work for the row-based parallel algorithm with $X = 2$ and some particular image $A$ with $N = 4$. \\ \\ 
+    We define the root process as $P_0$. The root process reads in the entire grayscale image $A$ and computes the number of gray levels in the image ($G$). Each worker process $P_x$ where $x \in X / \{0\}$ receives a copy of the grayscale image $A$ from the root process $P_0$ and allocates a partial GLCM of size $G \times G$. Then, the root process receives all partial GLCMs from the worker processes and computes the final GLCM for the entire image $A$. The algorithm for the child processes is displayed in Algorithm \ref{alg:1} and the algorithm for the root process is displayed in Algorithm \ref{alg:2}.
+    \begin{figure}
+      \includegraphics[width=\linewidth]{row_partitioning.jpg}
+      \caption{Diagram depicting the computation of partial GLCMs for $X = 2$ on image $A$ from Figure \ref{fig:matrix} for the row-based parallel algorithm with $d = 1, a = 0$. The root process $P_0$ is shown in yellow and the worker process $P_1$ is shown in blue. }
+      \label{fig:rows}
+    \end{figure}
 \begin{algorithm}
-    \caption{Algorithm for the non-root MPI processes, $P_x$ where $x \in X$ and $x > 0$. $X$ is the total number of processes. Note that partial rows here is not an exact translation from the code. Partial rows in the  \texttt{MPI\_Receive} is the total set of rows needed to compute neighbors, while partial rows in the for loop is the rows we are computing for. }\label{alg:1}
+    \caption{Algorithm for the non-root MPI processes, $P_x$ where $x \in X$ and $x > 0$. $X$ is the total number of processes. Note that rows here is the rows we are computing neighbors for. }\label{alg:1}
     \begin{algorithmic}
        % \Require $n \geq 0$
        % \Ensure $y = x^n$
     %    \State $start \gets x \cdot \frac{N}{X}$
     %    \State $stop \gets (x + 1) \cdot \frac{N}{X}$
-        \State \texttt{MPI\_Bcast}$($GLCM\_size$, P_0)$
+    %    \State \texttt{MPI\_Bcast}$($GLCM\_size$, P_0)$
         \State partial $\gets [0, 0, 0, ..., 0]$
-        \State partial image $\gets $  \texttt{MPI\_Receive}$($partial image$, P_0)$ \\
-        \While{$p$ in partial image} 
+        \While{$p$ in rows} 
         \If{$p$ has a neighbor}
             \State partial$[g_{n}][g_p] \gets $partial$[g_{n}][g_p] + 1$
            % \State $N \gets \frac{N}{2}$  \Comment{This is a comment}
@@ -104,11 +107,10 @@
 \end{algorithm}
 
 \begin{algorithm}
-    \caption{Algorithm for the root MPI process, $P_0$. }\label{alg:2}
+    \caption{Algorithm for the root MPI process, $P_0$. Note that rows here is the rows we are computing neighbors for.}\label{alg:2}
     \begin{algorithmic}
         \State GLCM $\gets [0, 0, 0, ..., 0]$
-        \State \texttt{MPI\_Bcast}$($GLCM\_size$, P_0)$ \\ 
-        \While{$p$ in GLCM}
+        \While{$p$ in rows}
         \If{$p$ has a neighbor}
             \State $GLCM[p] \gets GLCM[p] + 1$
         \EndIf
@@ -119,7 +121,12 @@
         \EndFor
     \end{algorithmic}
 \end{algorithm}
-
+    The tiled parallel algorithm computes the GLCM for a particular combination of a grayscale image $A$, an angle $a$, a distance $d$ and a number of processes $X$. We restrict the number of processes to an integer factor of the number of rows in the image ($N$) to simplify partitioning, and require the image size to be $N \times N$. Each process needs to compute a partial GLCM based on the pixels in $\frac{N}{0.5X} \times \frac{N}{0.5X}$ tiles of the image $A$. Figure \ref{fig:tiles} depicts the division of work for the row-based parallel algorithm with $X = 2$ and some particular image $A$ with $N = 4$.
+\begin{figure}[b]
+      \includegraphics[width=\linewidth]{tile_partitioning.jpg}
+      \caption{Diagram depicting the computation of partial GLCMs for $X = 4$ on image $A$ from Figure \ref{fig:matrix} for the tile-based parallel algorithm with $d = 1, a = 0$. The root process $P_0$ is shown in yellow and the worker processes $P_1$, $P_2$ and $P_3$ are shown in red, blue, and green, respectively. }
+      \label{fig:tiles}
+    \end{figure}
 \section{Experimental Results}
 \subsection{Simulated Experiments}
 \subsection{Cluster Experiments}
