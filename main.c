@@ -151,7 +151,7 @@ int main(int argc, char **argv)
 			(img_data){.arr=grey_img, .height=height, .width=width},
 			(gclm_data){.angle=angle, .arr=GLCM, .dist=distance, .size=GLCM_size}
 		);
-		fprintf(stdout,"%s | width: %d | height: %d | angle: %d | dist: %d | num_proc: %d |  time: %.3lfs | %s\n",
+		fprintf(stdout,"%s | width: %d | height: %d | angle: %d | dist: %d | num_proc: %d |  time: %.3lf | %s\n",
 			implementation,
 			width, 
 			height,
