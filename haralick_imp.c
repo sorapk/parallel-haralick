@@ -65,7 +65,7 @@ int check_gclm(mpi_data mpi, img_data img, gclm_data target_gclm) {
 		program_abort(NULL, "Out of memory - 3");
 	}  
 	init_arr_zero(ref_glcm, target_gclm.size * target_gclm.size);
-	sequential(mpi, img, (gclm_data){
+	sequential_v2(mpi, img, (gclm_data){
 		.arr = ref_glcm,
 		.dist = target_gclm.dist,
 		.size = target_gclm.size,
