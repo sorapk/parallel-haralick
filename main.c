@@ -110,7 +110,10 @@ int main(int argc, char **argv)
 	
 	//Execute
 	double start_time;
-	start_time = MPI_Wtime();
+	MPI_Barrier(MPI_COMM_WORLD);
+	if (rank == 0) {  
+		start_time = MPI_Wtime();
+	}
 
 	if (strcmp(implementation, "sequential") == 0){
 		sequential_v2(
@@ -143,7 +146,6 @@ int main(int argc, char **argv)
 	} 
 	
 	MPI_Barrier(MPI_COMM_WORLD);
-
 	//Print Summary
 	if (rank == 0) {
 		int good = check_gclm(
