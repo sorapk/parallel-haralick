@@ -28,8 +28,8 @@ int check_gclm(mpi_data mpi, img_data img, gclm_data target_gclm);
 /*
     Implementation
 */
-void sequential_v2(mpi_data mpi, img_data img, gclm_data gclm);
-void sync_vertical_split_v2(mpi_data mpi, img_data img, gclm_data gclm);
+void sequential(mpi_data mpi, img_data img, gclm_data gclm);
+void sync_vertical_split(mpi_data mpi, img_data img, gclm_data gclm);
 void sync_tiling_split(mpi_data mpi, img_data img, gclm_data gclm);
 
 #endif

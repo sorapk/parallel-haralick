@@ -86,6 +86,12 @@ int main(int argc, char **argv)
 		program_abort(NULL, "Invalid angle provided, angle must be one of 0, 45, 90, 135 \n");
 	}
 
+	//Init Result GLCM
+	double start_time;
+	if (rank == 0) {
+		start_time = MPI_Wtime();
+	}
+
 	/*
 	 *	Load Image
 	 */
@@ -100,7 +106,8 @@ int main(int argc, char **argv)
 	/*
 	 *	Process Image
 	 */
-	//Init Result GLCM
+
+	//Init output GLCM matrix
 	if (rank == 0) {
 		if ((GLCM = (int*) malloc(sizeof(int) * GLCM_size * GLCM_size)) == NULL) {
 			program_abort(NULL, "Out of memory! - 1");
@@ -109,14 +116,8 @@ int main(int argc, char **argv)
 	}
 	
 	//Execute
-	double start_time;
-	MPI_Barrier(MPI_COMM_WORLD);
-	if (rank == 0) {  
-		start_time = MPI_Wtime();
-	}
-
-	if (strcmp(implementation, "sequential") == 0){
-		sequential_v2(
+	if (strcmp(implementation, "sequential") == 0) {
+		sequential(
 			(mpi_data) {.num_procs=num_procs, .rank=rank},
 			(img_data) {.arr=grey_img, .height=height, .width=width},
 			(gclm_data) {.angle=angle, .arr=GLCM, .dist=distance, .size=GLCM_size}
@@ -138,7 +139,7 @@ int main(int argc, char **argv)
 		if (height % num_procs != 0) {
 			program_abort(NULL, "Image size is not evenly divisible by the number of processes \n");
 		}
-		sync_vertical_split_v2(
+		sync_vertical_split(
 			(mpi_data) {.num_procs=num_procs, .rank=rank},
 			(img_data) {.arr=grey_img, .height=height, .width=width},
 			(gclm_data) {.angle=angle, .arr=GLCM, .dist=distance, .size=GLCM_size}
