@@ -16,6 +16,6 @@ simulations, unless you remove the <config></config> clause.
 
 
 <zone id="AS0" routing="Full">
-<cluster id="cluster" prefix="host-" suffix=".hawaii.edu" radical="0-63" speed="10Gf" bw="10Gbps" lat="20us"/>
+<cluster id="cluster" prefix="host-" suffix=".hawaii.edu" radical="0-99" speed="10Gf" bw="10Gbps" lat="20us"/>
 </zone>
 </platform>

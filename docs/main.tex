@@ -5,6 +5,7 @@
 % Recommended, but optional, packages for figures and better typesetting:
 \usepackage{microtype}
 \usepackage{graphicx}
+\usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
@@ -46,7 +47,7 @@
 
 
 \begin{abstract}
-
+This paper presents two algorithms using MPI for parallel computation of gray-level co-occurence matrices, a precursory step to computation of the Haralick texture features. We evaluate the execution times of a sequential, row-based and tiled algorithm in a simulated environment and on the MANA cluster. We find that is a reasonable approach for reducing execution time for large images. We achieve a speedup ratio $>2$ for $1600 \times 1600$ images. 
 \end{abstract}
 
 \section{Introduction}
@@ -55,17 +56,17 @@
 \subsection{Gray-Level Co-occurrence Matrix}
     Haralick devised the GLCM (referred to as Gray-Tone Spatial-Dependence Matrices in his work) as a preliminary step for the computation of the Haralick textural features \cite{haralick}. The GLCM is a flexible measure of spatial dependence between pixel gray levels which is defined by an angle, a distance, and the unique gray tones in an image. We define the GLCM for some grayscale image $A$, generally following Haralick's notation, below. \\ \\
     Suppose image $A$ has dimensions $n \times m$ pixels. If we suppose the gray level in each pixel lies within the range 0-255. We assume here the image is stored in the standard byte format, with each pixel value stored as an 8-bit integer. We let $N = \{ 1, 2, ..., n\}$ and $M = \{1, 2, ..., m\}$ be the spatial coordinates of the pixels along the vertical and horizontal domains, respectively. Thus, the set $N \times M $ represents all spatial coordinates in the image $A$. Each spatial coordinate maps to a single gray level. We then arrive at the following mapping which defines the gray tones in an image: $ A:  N \times M \to G$, where $G$ is the set of all gray tones. \\ \\
-    The GLCM is a matrix of frequencies. We record the frequency that each pair of gray tones $g_e$ and $g_f$ occur within some distance $d$ of each other, at some angle $a$, where $g_e, g_f \in G$, $a \in \{0, 45, 90, 135\}$ and $d \in \{1, 2, ..., \min(m, n)\}$. Thus, GLCM $\in \mathbb{N}^{c \times c}$ where $c$ is the cardinality of the set $G$ for our given image $A$. The angle $a$ defines along which axis we walk the distance $d$ and is pictured in Figure \ref{fig:directions}. Each pixel $p$ in an image then has 8 possible neighboring pixels, excluding those for which these neighbors would extend beyond the edge of the grayscale image $A$. \\ \\
-    \begin{figure}
+        \begin{figure}[t]
       \includegraphics[width=\linewidth]{direction_fig.PNG}
-      \caption{If we consider a certain pixel $p$ from a certain grayscale image $A$, we can define the angle-dependent spatial relationships as shown. Each arrow represents the line on which we compute $d-$distance nearest neighbors from our pixel $p$. The red, dotted line shows the 0\textdegree  path; the orange, solid line shows 45\textdegree  path; the green, dotted and dashed line shows the 90\textdegree  path, and the blue, dashed line shows the 135\textdegree  path. Adapted from: Robert Haralick, K. Shanmugam, and Ih Dinstein. Textural features for image classification. \textit{IEEE Trans Syst Man Cybern}, SMC-3:610–621, 01 1973. }
+      \caption{If we consider a certain pixel $p$ from a certain grayscale image $A$, we can define the angle-dependent spatial relationships as shown. Each arrow represents the line on which we compute $d-$distance nearest neighbors from our pixel $p$. The red, dotted line shows the 0\textdegree  path; the orange, solid line shows 45\textdegree  path; the green, dotted and dashed line shows the 90\textdegree  path, and the blue, dashed line shows the 135\textdegree  path. Adapted from \cite{haralick}. }
       \label{fig:directions}
     \end{figure}
+    The GLCM is a matrix of frequencies. We record the frequency that each pair of gray tones $g_e$ and $g_f$ occur within some distance $d$ of each other, at some angle $a$, where $g_e, g_f \in G$, $a \in \{0, 45, 90, 135\}$ and $d \in \{1, 2, ..., \min(m, n)\}$. Thus, GLCM $\in \mathbb{N}^{c \times c}$ where $c$ is the cardinality of the set $G$ for our given image $A$. The angle $a$ defines along which axis we walk the distance $d$ and is pictured in Figure \ref{fig:directions}. Each pixel $p$ in an image then has 8 possible neighboring pixels, excluding those for which these neighbors would extend beyond the edge of the grayscale image $A$. \\ \\
         The choice of angle $a$ and distance $d$ for a certain image is dependent on the type of texture being classified. Coarse textures are better represented with a large distance and fine textures are better represented with a small distance. Typically, the GLCM of distance $d$ will be computed for all angles $a$, unless there is some prior knowledge about what direction the texture in $A$ should fall. \\ \\
-       Figure \ref{fig:matrix} shows an example computation of a GLCM for some image $A$, depicted in Figure \ref{fig:matrix}(a) with distance 1 ($d = 1$). Figure \ref{fig:matrix}(b) shows the coordinate system for a general image where there are six gray tone values. Each cell is filled with the frequency at which the coordinate gray tones appear as neighbors, given a particular distance and angle. Figure \ref{fig:matrix}(c)-(f) show GLCMs constructed from $A$ using each possible value for the angle at distance 1. For example, Figure \ref{fig:matrix}(e) shows the GLCM constructed from $A$ when $a = 90$ and $d = 1$. The elements (0,3) and (3,0) reflect that the gray tones 0 ad 3 appear next to one another on the vertical angle line one time. Note that, as defined by Haralick, a GLCM will always be symmetric. 
+       Figure \ref{fig:matrix} shows an example computation of a GLCM for some image $A$, depicted in Figure \ref{fig:matrix}(a) with distance 1 ($d = 1$). Figure \ref{fig:matrix}(b) shows the coordinate system for a general image where there are six gray tone values. Each cell is filled with the frequency at which the coordinate gray tones appear as neighbors, given a particular distance and angle. Figure \ref{fig:matrix}(c)-(f) show GLCMs constructed from $A$ using each possible value for the angle at distance 1. For example, Figure \ref{fig:matrix}(e) shows the GLCM constructed from $A$ when $a = 90$ and $d = 1$. The elements (0,3) and (3,0) reflect that the gray tones 0 and 3 appear next to one another on the vertical angle line one time. Note that, as defined by Haralick, a GLCM will always be symmetric. 
     \begin{figure}[t]
       \includegraphics[width=\linewidth]{matrix_fig.PNG}
-      \caption{ (a) a $4 \times 4$ image $A$ with six gray tones, $G = \{0, 1, 2, 3, 4, 5, 6\}$. (b) General form of any GLCM constructed from $A$, or any other image with 6 gray tones. The coordinate system is $G \times G$. (c)-(f) GLCMs for angle values (clockwise from top right) 0, 45, 135, and 90 degrees at $d = 1$ for our image $A$.  Adapted from: Robert Haralick, K. Shanmugam, and Ih Dinstein. Textural features for image classification. \textit{IEEE Trans Syst Man Cybern}, SMC-3:610–621, 01 1973. }
+      \caption{ (a) a $4 \times 4$ image $A$ with six gray tones, $G = \{0, 1, 2, 3, 4, 5, 6\}$. (b) General form of any GLCM constructed from $A$, or any other image with 6 gray tones. The coordinate system is $G \times G$. (c)-(f) GLCMs for angle values (clockwise from top right) 0, 45, 135, and 90 degrees at $d = 1$ for our image $A$.  Adapted from \cite{haralick}. }
       \label{fig:matrix}
     \end{figure}
 \subsection{MPI}
@@ -79,7 +80,7 @@
     Another exploration into using GPUs to achieve highly parallel computation of the Haralick features is found in \cite{gipp}. Gipp et al. examined parallelization of GLCM construction and feature computation on microscopy images. Due to the relative simplicity of gray tone spatial relationships in microscopy imagery (typically only 2 or 3 unique neighboring gray tones)  Gipp et al. chose to condense the GLCM by removing all zero-filled rows and columns \cite{gipp}. It's unclear how effective the "packing" strategy would be on an image with more variation in its spatial relationships. Gipp et al. also implement parallelization by splitting their multi-cell microscopy images into single- cell images, and passing each image to a separate GPU thread \cite{gipp}. Gipp et al. do not use distributed memory in their approach, and do not implement parallelization on the individual image level. \\ \\
    Parallel GLCM construction using distributed memory is seen in \cite{shahbahrami}. Shahbahrami, Pham, and Bertels implement GLCM construction and computation of the Haralick texture features in parallel on a cell architecture, a multi-core architecture containing nine processors of two types \cite{shahbahrami}.  Shahbahrami, Pham, and Bertels achieved a 10$\times$ speedup over non-parallel optimized implementations. Shahbahrami, Pham, and Bertels approach GLCM construction similarly to our method, splitting the image by rows to compute independently, before summing at two levels (i.e. for four processes, a sum is computed between processes 1 and 2 in parallel with processes 3 and 4, then a final sum is computed) to construct the final GLCM \cite{shahbahrami}. Shahbahrami, Pham, and Bertels tested their implementation with images with only 128 distinct gray levels, limiting the real-world implications of their results. 
 \section{Parallel Algorithm}
-    We implemented two different parallel implementations of the GLCM construction process. Each algorithm makes use of MPI processes having their own memory to store partial computations and a copy of the grayscale image, while referring to a relevant section of the grayscale image $A$. We implemented a row-based parallel algorithm, a tiled parallel algorithm, and a sequential algorithm. \\ \\ 
+    We implemented two different parallel implementations of the GLCM construction process in C. Each algorithm makes use of MPI processes having their own memory to store partial computations and a copy of the grayscale image, while referring to a relevant section of the grayscale image $A$. The grayscale image $A$ is stored as a flat array of size $N \times M$ to speed up indexing operations. We implemented a row-based parallel algorithm, a tiled parallel algorithm, and a sequential algorithm. \\ \\ 
     The row-based parallel algorithm computes the GLCM for a particular combination of a grayscale image $A$, an angle $a$, a distance $d$ and a number of processes $X$. We restrict the number of processes to an integer factor of the number of rows in the image ($N$) to simplify partitioning. Each process needs to compute a partial GLCM based on the pixels in $\frac{N}{X}$ rows of the image $A$. Figure \ref{fig:rows} depicts the division of work for the row-based parallel algorithm with $X = 2$ and some particular image $A$ with $N = 4$. \\ \\ 
     We define the root process as $P_0$. The root process reads in the entire grayscale image $A$ and computes the number of gray levels in the image ($G$). Each worker process $P_x$ where $x \in X / \{0\}$ receives a copy of the grayscale image $A$ from the root process $P_0$ and allocates a partial GLCM of size $G \times G$. Then, the root process receives all partial GLCMs from the worker processes and computes the final GLCM for the entire image $A$. The algorithm for the child processes is displayed in Algorithm \ref{alg:1} and the algorithm for the root process is displayed in Algorithm \ref{alg:2}.
     \begin{figure}
@@ -87,7 +88,7 @@
       \caption{Diagram depicting the computation of partial GLCMs for $X = 2$ on image $A$ from Figure \ref{fig:matrix} for the row-based parallel algorithm with $d = 1, a = 0$. The root process $P_0$ is shown in yellow and the worker process $P_1$ is shown in blue. }
       \label{fig:rows}
     \end{figure}
-\begin{algorithm}
+\begin{algorithm}[t]
     \caption{Algorithm for the non-root MPI processes, $P_x$ where $x \in X$ and $x > 0$. $X$ is the total number of processes. Note that rows here is the rows we are computing neighbors for. }\label{alg:1}
     \begin{algorithmic}
        % \Require $n \geq 0$
@@ -121,17 +122,114 @@
         \EndFor
     \end{algorithmic}
 \end{algorithm}
-    The tiled parallel algorithm computes the GLCM for a particular combination of a grayscale image $A$, an angle $a$, a distance $d$ and a number of processes $X$. We restrict the number of processes to an integer factor of the number of rows in the image ($N$) to simplify partitioning, and require the image size to be $N \times N$. Each process needs to compute a partial GLCM based on the pixels in $\frac{N}{0.5X} \times \frac{N}{0.5X}$ tiles of the image $A$. Figure \ref{fig:tiles} depicts the division of work for the tile-based parallel algorithm with $X = 2$ and some particular image $A$ with $N = 4$.
-\begin{figure}[b]
+    The tiled parallel algorithm computes the GLCM for a particular combination of a grayscale image $A$, an angle $a$, a distance $d$ and a number of processes $X$. We restrict the number of processes to an integer factor of the number of rows in the image ($N$) to simplify partitioning, and require the image size to be $N \times N$. Each process needs to compute a partial GLCM based on the pixels in $\frac{N}{\sqrt{X}} \times \frac{N}{\sqrt{X}}$ tiles of the image $A$. Figure \ref{fig:tiles} depicts the division of work for the tile-based parallel algorithm with $X = 4$ and some particular image $A$ with $N = 4$. \\ \\ 
+    We define the root process as $P_0$. The root process reads in the entire grayscale image $A$ and computes the number of gray levels in the image ($G$). Each worker process $P_x$ where $x \in X / \{0\}$ receives a copy of the grayscale image $A$ from the root process $P_0$ and allocates a partial GLCM of size $G \times G$. Then, the root process receives all partial GLCMs from the worker processes and computes the final GLCM for the entire image $A$. The general algorithm for tiling is consistent with the row-based algorithm, the only change is in the partitioning of the work. 
+\begin{figure}[h]
       \includegraphics[width=\linewidth]{tile_partitioning.jpg}
-      \caption{Diagram depicting the computation of partial GLCMs for $X = 4$ on image $A$ from Figure \ref{fig:matrix} for the tile-based parallel algorithm with $d = 1, a = 0$. The root process $P_0$ is shown in yellow and the worker processes $P_1$, $P_2$ and $P_3$ are shown in red, blue, and green, respectively. }
+      \caption{Diagram depicting the computation of partial GLCMs for $X = 4$ on image $A$ from Figure \ref{fig:matrix} for the tile-based parallel algorithm with $d = 1, a = 0$. The root process $P_0$ is shown in yellow and the worker processes $P_1$, $P_2$ and $P_3$ are shown in red, blue, and green, respectively.}
       \label{fig:tiles}
     \end{figure}
 \section{Experimental Results}
 \subsection{Simulated Experiments}
-\subsection{Cluster Experiments}
-
+    Simulated results were provided using SMPI on SimGrid \cite{henri}. Simulations were ran across two team member's personal computers. To make the simulation results consistent,  the simulation was calibrated using the \texttt{calibrate\_flops.py} script provided at \cite{calib}. This script uses a binary search to find the optimal speed on the local machine for simulating a parallel platform in which each processor computes at a rate of 200Gflops \cite{calib}. Simulations were ran with \texttt{--cfg=smpi/host-speed:6595611572.266f} on machine A and \texttt{--cfg=smpi/host-speed:733375549.316f} on machine B. All SMPI simulations were performed with randomly generated images of size $N \times N$ with grayscale values $[0, 255]$, on a crossbar cluster with 100 processors. Timing results averaged over all angle measurements, distance measurements, and 5 trials are displayed in Table \ref{Tab:smpi}. Note also that the execution time does not include the time to perform input protection or load in the image. \\ \\ 
+    \begin{table} [t]% Try here, and then top
+      \caption{Table displaying the simulation execution times of the row-based, tiled, and sequential (shown as $X = 1$ below) algorithms on randomly generated grayscale images of different sizes. Recall that $N \times N$ represents the size in pixels of a square image $A$ and $X$ is defined as the number of processes we are using. Execution time is measured in seconds. Results are averaged over all angle $\{0, 45, 90, 135\}$ and distance measurements $\{1, 5, 10\}$. }
+    \begin{tabular}{c | c c  c}
+         $N $ & Algorithm & $X$ &  Execution Time\\ \hline
+        $ 100  $ & & 1   & $ \approx$ 0.000 \\
+        &  Row-based & 4 & 0.002 \\
+        &  Tiled & 4 & 0.002 \\
+        &  Row-based & 25 & 0.012 \\
+        &  Tiled & 25 & 0.012 \\ \hline
+        $ 500  $ & & 1   & 0.0538 \\
+        &  Row-based & 4 &  0.015 \\
+        &  Tiled & 4 & 0.0151 \\
+        &  Row-based & 25 & 0.0434 \\
+        &  Tiled & 25 & 0.0492 \\ \hline
+        $ 1000  $ & & 1   & 0.091  \\
+        &  Row-based & 4 & 0.0573 \\
+        &  Tiled & 4 & 0.0578\\
+        &  Row-based & 25 &  0.0878\\
+        &  Tiled & 25 & 0.0905 
+    \end{tabular}
+ \label{Tab:smpi}
+\end{table}
+The SMPI results are quite surprising. Enlarging the size of the image $A$ increased computation time across the board, which was expected. However, computation of the GLCM using 25 processes consistently had a longer execution time than using 4 processes. Both the tiling and row-based algorithms use blocking \texttt{MPI\_Send} and \texttt{MPI\_Receive} communications, with one occurrence of each for each process. 25 processes then contains more than 6 times as many blocking communications as  4 processes. This adds considerable overhead to the computation. \\ \\ 
+The addition of distributed computation was not beneficial for the $100 \times 100$ image size. This could be due to the time spent performing communications exceeding the time needed to loop through the entire image once. For a $500 \times 500$ image, the parallel speedups observed for 4 processes were 0.897 and 0.891 for the row-based and tiling algorithms, respectively. For 25 processes, the speedups observed were 0.0496 and 0.0437, respectively. The trend of 25 processes under-performing 4 processes was also observed for the $1000 \times 1000$ image, where the parallel speedups were 0.397 (row-based) and 0.394 (tiling) for the 4 process executions and 0.0415 (row-based) and 0.04 (tiling). \\ \\
+We hypothesize that the low parallel speedup observed for 25 processes is due to the imbalance in the portion of the computation which is distributed and the portion which is implemented sequentially. After all processes compute their partial GLCM, the results are aggregated by the root processes by going through each partial separately and adding its elements to the full GLCM sequentially. This process expands in complexity as the number of processes increases. \\ \\ 
+The number of memory accesses for a single partial GLCM to be added to the complete GLCM is $2 \left ( G \times G \right)$ because we need to access all elements in both the full GLCM and the partial. The number of computations is $G \times G$ because we need to increment each element in the full GLCM by the value found in the partial GLCM. Thus, for $X$ processes, the accesses and computations are equal to $2(X - 1) \left ( G \times G \right)$ and $(X - 1) \left ( G \times G \right )$, respectively. As the number of processes increases, the number of memory accesses and computations needed to compute the full GLCM increases at a linear rate, providing a possible explanation of why more processes does not always provide better performance. 
+\subsection{Cluster Experiments} 
+Cluster experiments were performed on the MANA cluster at the University of Hawai'i at M\=anoa. Cluster experiments were performed across 3 days, on the \texttt{ics632} partition of the cluster. New random images with size $N \times N$ and grayscale values $[0, 255]$ were generated for every trial. Note that the execution time does not include the time to perform input protection or load in the image. Trials were run for each combination of the following: (Note that additional arguments for $X$ were included if $\frac{N}{X}, \frac{N}{\sqrt{X}} \in \mathbb{N}$)
+\begin{itemize}
+    \item $N \in \{100, 300, 500, 1000, 1600\}$
+    \item $a \in \{0, 45, 90, 135\}$
+    \item $d\in \{1, 5, 10, 15\}$
+    \item $X \in \{1, 4, 25\}$
+\end{itemize}
+    \begin{figure}
+      \includegraphics[width=\linewidth]{plot_all_sizes.jpg}
+      \caption{Line plot showing the recorded average execution time over all distances $\{1, 5, 10, 15\}$ and angles $\{0, 45, 90, 135\}$. Dashed lines represent the tiled algorithm for each image size, and dotted lines represent the row-based algorithm for each image size. Results from the sequential algorithm is displayed at $X = 1$. }
+      \label{fig:plotsizes}
+    \end{figure}
+    Figure \ref{fig:plotsizes} displays the change in average execution time over all distances and angles for all image sizes $N$ as the number of processes $X$ increases for both algorithms. The average execution time over all image sizes is also shown. The dashed line for each color shows the execution time for the tiled algorithm and the dotted line shows the execution time for the row-based algorithm. \\ \\ 
+    For small image sizes $(N \leq 500)$, there is a consistent pattern of a small decrease in execution time for $X = 4$, and a subsequent increase for $X = 25$. For larger image sizes $(N \geq 1000)$, as well as the overall trend, there is a different, but still consistent pattern in execution times. The tiled and row-based algorithms perform nearly identically at $X = 4$, but at $X = 25$ their performance diverges. The tiled algorithm outperforms the row-based algorithm and the sequential algorithm for $N = 1000, 1600$ as well as overall. \\ \\ 
+     Figure \ref{fig:plot25} shows a line plot of the average execution times for all image sizes $N$ when $X = 25$ and Table \ref{Tab:speedup} displays the speedup ratio for the average computation time across all angles and distances for each image size $N$.  We can clearly see the tiled algorithm start to outperform the row-based algorithm when $N = 500$, and finally outperform the sequential algorithm $(X = 1)$ when $N = 1000$. We first hypothesized that the reason for the observed tiled speedup is the added memory localization which tiling provides, which can reduce cache misses, and thereby improve performance for larger images.\\ \\ 
+    We conducted an experiment to test our hypothesis using $d = 1$ and $X = 25$ on MANA to judge whether the tiled algorithm reduced either L1 or LLC cache misses. We averaged the cache misses over $a \in \{0, 45, 90, 135\}$ for all image sizes. Figure \ref{fig:sidebyside} displays side-by-side line plots for the average L1 and LLC cache misses which we observed. The results from our experiment don't seem to clearly support our hypothesis. The tiled algorithm does have the least LLC cache misses when $N = 500$, but it has slightly more LLC cache misses on average when $N = 1600$. The sequential algorithm had the fewest cache misses L1 and LLC cache misses for all $N < 1600$. \\ \\
+    \begin{table}
+    \caption{Table displaying the speedup ratios of the recorded average execution time over all distances $\{1, 5, 10, 15\}$ and angles $\{0, 45, 90, 135\}$. $E_x$ is defined as the average execution time with $X = x$ processors. Speedup ratio is computed by $\frac{E_1}{E_x}$ where $x \in \{4, 25\}$. }
+        \begin{tabular}{c | c c  c}
+         $N$ & $X$ & Algorithm & Speedup Ratio \\ \hline
+        $ 100 $ & 4 & Row-based &  3.300 \\
+        &   & Tiled & 3.300 \\
+        &  25 & Row-based & 0.253 \\
+        &   & Tiled & 0.280 \\ \hline
+        $ 300 $ & 4 & Row-based & 1.891 \\
+        &   & Tiled & 1.859 \\
+        &  25 & Row-based & 0.334 \\
+        &   & Tiled & 0.317 \\ \hline
+        $ 500 $ & 4 & Row-based & 1.547 \\
+        &   & Tiled & 1.534 \\
+        &  25 & Row-based & 0.491 \\
+        &   & Tiled & 0.611 \\ \hline
+        $ 1000 $ & 4 & Row-based & 1.294 \\
+        &   & Tiled & 1.285 \\
+        &  25 & Row-based & 0.818\\
+        &   & Tiled & 1.297 \\ \hline
+        $ 1600 $ & 4 & Row-based & 1.239 \\
+        &   & Tiled & 1.241 \\
+        &  25 & Row-based & 1.006 \\
+        &   & Tiled & 2.235 
+    \end{tabular}
+ \label{Tab:speedup}
+\end{table}
+    \begin{figure}
+      \includegraphics[width=\linewidth]{plot25.jpg}
+      \caption{Line plot showing the recorded average execution time over all distances $\{1, 5, 10, 15\}$ and angles $\{0, 45, 90, 135\}$ when $X = 25$ for all image sizes $N$.  Results from the sequential algorithm is displayed at $X = 1$. }
+      \label{fig:plot25}
+    \end{figure}
+        \begin{figure}[t]
+      \includegraphics[width=\linewidth]{sidebyside.jpg}
+      \caption{Line plot showing the recorded average L1 and LLC cache misses for $d = 1$ and averaged over all angles $\{0, 45, 90, 135\}$ when $X = 25$ for all image sizes $N$.  }
+      \label{fig:sidebyside}
+    \end{figure}
+        Because of the variety in parameters which can be provided to our algorithms, we investigated several possible interactions between parameter values. There were no meaningful patterns observed with respect to performance with the different angle options. For all values of $a$, the difference in the average execution time aggregated over all values of $d$ and all algorithms was $< 0.005$ seconds. We computed this difference for each $X \in \{1, 4, 16, 25\}$. There was a consistent pattern at the interaction between $d$ and $a$. For all distances $d$, $a = 135$ took the longest time to compute. We hypothesize this is because of the relative complexity of the indexing in comparison to the other angles. A pixel $p$'s $a = 135$ neighbors are also unlikely to both be loaded into the cache, as they are the furthest pair of neighbors from pixel $p$ at any distance, in a single-indexed array. There was no meaningful relationship observed between values of $d$ and overall execution time. The interaction between angle $a$, distance $d$ and average execution time is shown in Figure \ref{fig:dist}. \\ \\ 
+        The results from our cluster experimentation suggest that parallelization using MPI could be a useful strategy for speeding up the computation time of the GLCM for larger images. We would suggest that tiled parallelization be considered when $N \geq 1000$. Tiled parallelization showed improvement over the row-based and sequential algorithms for images this size. We advise against parallelization of GLCM construction for small images, where the sequential algorithm may be sufficient.   
+     \begin{figure}
+      \includegraphics[width=\linewidth]{distangle.jpg}
+      \caption{Scatter plot showing the recorded average execution times for all values of $d$ and $a$, averaged over all values of $X$ and $N$. The red square represents $a = 0$, the blue circle $a = 45$, the green triangle $a = 90$, and the yellow diamond $a = 135$. }
+      \label{fig:dist}
+    \end{figure}
+\section{Future Work}
+There is potential for future work to done on parallelization of GLCM construction with MPI. Fast, memory efficient GLCM construction will continue to become more important as the Haralick texture features are used in clinical settings with medical imaging. MPI provides a convenient framework to facilitate speedup of these processes. \\ \\ 
+Future projects could explore using complex indexing and data distribution to send only the pixels which a certain process needs to compute its partial GLCM. With a single-indexed array $A$ of size $N \times N$, the necessary discrete math for the row-based algorithm is as follows. $p_s$ represents the index of the first pixel a certain process $P_x$ needs to access, and $p_e$ represents the index of the last pixel $P_x$ needs to access. $[p_0, ..., p_f] $ represent the indices of the range of pixels $P_x$ needs to compute neighbors for. Computation of adjusted indices for the tiling implementation is somewhat more complex.
+\begin{align}
+    r &= \frac{p_f - p_0}{M}\\
+    p_s &= \max \left ( 0, \left ( r \cdot x - d  \right) \cdot N \right)\\
+    p_e &= \min \left ( \left ( x + d \right) \cdot (r + 1) \cdot N, N \cdot N - 1 \right)
+\end{align}
+Another opportunity for future work lies in utilizing the collective communication methods of MPI. \texttt{MPI\_Reduce} could be used to collect and sum all of the partial GLCMs fro the non-root processes. In our implementation, each non-root process must conduct an individual, blocking \texttt{MPI\_Send} to send their partial GLCM to the root process to be added to the overall GLCM sums. 
 \section{Conclusion }
+In this paper we experimented with different algorithms for parallel computation of the GLCM for some image $A$. We showed that using MPI, you can achieve faster results than with the sequential algorithm for large image sizes. We achieved a speedup ratio of 2.235 using the tiled algorithm with $X = 25$ processes and an image size of $N = 1600$. The row-based and tiled algorithms which we implemented show potential for further performance optimization using non-blocking communication, distributed memory, and collective communications. 
 
 \bibliography{references}
 
